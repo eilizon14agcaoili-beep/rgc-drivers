@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kasama – Log in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Admin button next to "Create an account" */
+    .switch__row {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 8px 14px;
+    }
+    .admin-link {
+      display: inline-block; font: inherit; font-weight: 700; font-size: .85rem;
+      text-decoration: none; color: #12263a; background: #f2b01e;
+      padding: 5px 14px; border-radius: 999px; line-height: 1.4;
+    }
+    .admin-link:hover { filter: brightness(.95); }
+    .admin-link:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+
+    /* Show / hide password */
+    .pw { position: relative; }
+    .pw input { padding-right: 46px; }
+    .pw__toggle {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      width: 36px; height: 36px; display: grid; place-items: center; padding: 0;
+      background: transparent; border: 0; border-radius: 8px; cursor: pointer; color: inherit; opacity: .6;
+    }
+    .pw__toggle:hover { opacity: 1; }
+    .pw__toggle:focus-visible { outline: 3px solid currentColor; outline-offset: 1px; opacity: 1; }
+    .pw__toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .pw__toggle .eye-off { display: none; }
+    .pw__toggle[aria-pressed="true"] .eye { display: none; }
+    .pw__toggle[aria-pressed="true"] .eye-off { display: block; }
+  </style>
+</head>
+<body>
+  <main class="auth">
+    <section class="auth__map" aria-hidden="true">
+      <div class="map-visual-container">
+        <span class="map-pin pin--a"><b>Delivery Rider 1</b></span>
+        <span class="map-pin pin--b"><b>Messenger 2</b></span>
+        <span class="map-pin pin--c"><b>Field Agent 3</b></span>
+        <div class="rider-traveler" title="Active Rider">
+          <span class="rider-icon">🛵</span>
+        </div>
+      </div>
+      <h1><span>Know your</span> <span>people are</span> <span>safe on the road.</span></h1>
+    </section>
+
+    <section class="auth__panel">
+      <div class="card">
+        <h2 id="title">Log in</h2>
+        <p class="sub" id="subtitle">Welcome back. Your circle is waiting.</p>
+
+        <form id="auth-form" novalidate>
+          <div id="name-row" class="hidden">
+            <label for="name">Your name</label>
+            <input id="name" type="text" autocomplete="name">
+
+            <label for="username">Username</label>
+            <input id="username" type="text" autocomplete="username" maxlength="20" placeholder="e.g. juan_rider" autocapitalize="none" spellcheck="false">
+          </div>
+
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="email" required>
+
+          <label for="password">Password</label>
+          <div class="pw">
+            <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+            <button class="pw__toggle" id="toggle-pw" type="button" aria-label="Show password" aria-pressed="false">
+              <svg class="eye" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a19.8 19.8 0 0 1 5.06-5.94"/>
+                <path d="M9.9 4.24A10.4 10.4 0 0 1 12 5c7 0 11 7 11 7a19.9 19.9 0 0 1-3.17 4.19"/>
+                <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
+
+          <p class="error" id="error" role="alert"></p>
+          <button class="btn" id="submit" type="submit">Log in</button>
+        </form>
+
+        <p class="switch">
+          <span class="switch__row">
+            <span>
+              <span id="switch-text">No account yet?</span>
+              <button type="button" id="switch-btn">Create an account</button>
+            </span>
+            <a class="admin-link" href="admin-login.html">Admin</a>
+          </span>
+        </p>
+      </div>
+    </section>
+  </main>
+  <script>
+    // Username on sign up: validate, then remember it until the new account opens the dashboard
+    document.addEventListener("submit", function (e) {
+      var nameRow = document.getElementById("name-row");
+      if (!nameRow || nameRow.classList.contains("hidden")) return;   // log in mode: nothing to do
+
+      var username = document.getElementById("username").value.trim().toLowerCase();
+      var email = document.getElementById("email").value.trim().toLowerCase();
+      var err = document.getElementById("error");
+
+      if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+        e.preventDefault();
+        e.stopPropagation();
+        err.textContent = "Username must be 3-20 characters: letters, numbers or underscore.";
+        return;
+      }
+      try {
+        localStorage.setItem("pendingUsername", JSON.stringify({ email: email, username: username }));
+      } catch (x) { /* ignore */ }
+    }, true);   // capture: runs before auth.js
+  </script>
+  <script>
+    // Show / hide password
+    document.getElementById("toggle-pw").addEventListener("click", function () {
+      var input = document.getElementById("password");
+      var btn = document.getElementById("toggle-pw");
+      var show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.setAttribute("aria-pressed", String(show));
+      btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      input.focus();
+    });
+  </script>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>

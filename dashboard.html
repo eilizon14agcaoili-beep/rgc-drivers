@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RGCD – Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #12263a;
+      --paper: #eef1f4;
+      --surface: #ffffff;
+      --line: #d3dae1;
+      --duty: #1f8a5b;
+      --duty-deep: #166845;
+      --amber: #f2b01e;
+      --danger: #c0392b;
+      --muted: #5d6c7b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e8eef4;
+        --paper: #0e1a26;
+        --surface: #162636;
+        --line: #26394c;
+        --duty: #2fb87e;
+        --duty-deep: #25a06b;
+        --muted: #93a3b3;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.5;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .hidden { display: none !important; }
+
+    /* Top bar */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap;
+      padding: 14px 20px;
+      background: var(--ink);
+      color: var(--paper);
+    }
+    @media (prefers-color-scheme: dark) {
+      .topbar { background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line); }
+    }
+    .topbar__left, .topbar__right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .brand { font-weight: 800; letter-spacing: .04em; font-size: 1.05rem; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 4px 6px 4px 12px; border-radius: 999px;
+      background: rgba(255,255,255,.12); font-size: .85rem;
+    }
+    .chip__code b { font-weight: 700; letter-spacing: .08em; }
+    .link {
+      background: var(--amber); color: #12263a; border: 0; cursor: pointer;
+      font: inherit; font-size: .8rem; font-weight: 700;
+      padding: 4px 12px; border-radius: 999px;
+    }
+    #user-name { font-size: .9rem; opacity: .9; }
+
+    /* Buttons */
+    .btn {
+      font: inherit; font-weight: 700; cursor: pointer;
+      background: var(--duty); color: #fff; border: 0;
+      padding: 12px 20px; border-radius: 10px;
+    }
+    .btn:hover { background: var(--duty-deep); }
+    .btn--ghost {
+      background: transparent; color: inherit;
+      border: 1px solid currentColor; padding: 6px 14px; font-size: .85rem; font-weight: 600;
+    }
+    .btn--ghost:hover { background: rgba(255,255,255,.12); }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+
+    .center-msg { text-align: center; color: var(--muted); padding: 48px 20px; }
+
+    /* Toast */
+    .toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      background: var(--ink); color: var(--paper);
+      padding: 10px 18px; border-radius: 10px; z-index: 50;
+      font-size: .9rem; max-width: 90vw;
+    }
+
+    /* Gate (create / join) */
+    .gate { max-width: 760px; margin: 0 auto; padding: 40px 20px; }
+    .gate__intro h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.1; margin: 0 0 8px; }
+    .gate__intro p { color: var(--muted); margin: 0 0 28px; max-width: 52ch; }
+    .gate__cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .panel {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 14px; padding: 22px;
+    }
+    .panel h2, .panel h3 { margin: 0 0 14px; font-size: 1.05rem; }
+    label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%; font: inherit; color: var(--ink);
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: 10px; padding: 11px 12px; margin-bottom: 10px;
+    }
+    .error { color: var(--danger); font-size: .85rem; min-height: 1.2em; margin: 0 0 10px; }
+
+    /* Dashboard */
+    .dash {
+      max-width: 560px; margin: 0 auto; padding: 28px 20px 48px;
+      display: grid; gap: 20px;
+    }
+    .duty {
+      text-align: center; padding: 36px 20px 30px;
+      border-top: 6px solid var(--duty);
+    }
+    .duty__label { margin: 0 0 4px; color: var(--muted); font-size: .9rem; }
+    .duty__state { margin: 0 0 24px; font-size: 1.6rem; font-weight: 800; }
+    .duty__btn {
+      width: min(240px, 70vw); aspect-ratio: 1; border-radius: 50%;
+      border: 0; cursor: pointer; font: inherit;
+      font-size: 1.35rem; font-weight: 800; line-height: 1.2;
+      background: var(--duty); color: #fff;
+      box-shadow: 0 0 0 10px color-mix(in srgb, var(--duty) 18%, transparent);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .duty__btn:hover { background: var(--duty-deep); }
+    .duty__btn.is-sharing {
+      background: var(--danger);
+      box-shadow: 0 0 0 10px color-mix(in srgb, var(--danger) 18%, transparent);
+    }
+    .hint.error { color: var(--danger); }
+    .toast.error { background: var(--danger); color: #fff; }
+    .member__info { display: flex; flex-direction: column; }
+    .member__name { font-weight: 600; }
+    .member__status { font-size: .8rem; color: var(--muted); }
+    .avatar {
+      width: 36px; height: 36px; border-radius: 50%; color: #fff;
+      display: grid; place-items: center; font-weight: 700; flex: none;
+    }
+    .tag {
+      font-size: .7rem; padding: 2px 8px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--line); color: var(--muted);
+    }
+    .duty__btn:active { transform: scale(.97); }
+    .duty__btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* Trip (from / to) */
+    .trip { text-align: left; max-width: 360px; margin: 0 auto; }
+    .trip label { margin-top: 4px; }
+    .trip .error { text-align: center; margin: 0; }
+    .trip-current {
+      margin: 0 auto 14px; max-width: 360px; padding: 10px 14px;
+      border: 1px solid var(--line); border-radius: 12px; background: var(--paper);
+      font-weight: 700;
+    }
+    .trip-current small { display: block; font-weight: 400; color: var(--muted); }
+    .trip-panel h3 { margin: 0 0 14px; }
+    .trip-actions { display: flex; gap: 10px; }
+    .trip-actions .btn { flex: 1; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    input:disabled { opacity: .6; cursor: not-allowed; }
+    .btn--done { background: var(--ink); color: var(--paper); }
+    .btn--done:hover { background: var(--ink); filter: brightness(1.15); }
+    .map-status, .hint { color: var(--muted); font-size: .85rem; margin: 22px auto 0; max-width: 40ch; }
+
+    .count {
+      display: inline-block; min-width: 1.6em; text-align: center;
+      background: var(--ink); color: var(--paper);
+      border-radius: 999px; font-size: .75rem; padding: 1px 8px; margin-left: 6px;
+    }
+    .members { list-style: none; margin: 0; padding: 0; }
+    .members li {
+      padding: 10px 0; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .members li:last-child { border-bottom: 0; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; }
+    }
+  </style>
+</head>
+<body class="app">
+  <!-- Toast Notification Banner -->
+  <div id="toast" class="toast hidden" role="alert"></div>
+
+  <header class="topbar">
+    <div class="topbar__left">
+      <strong class="brand">REGCRIS</strong>
+      <div id="circle-chip" class="chip hidden">
+        <span id="circle-name"></span>
+        <span class="chip__code">Code <b id="circle-code"></b></span>
+        <button type="button" id="copy-code" class="link">Copy</button>
+      </div>
+    </div>
+    <div class="topbar__right">
+      <span id="user-name"></span>
+      <button class="btn btn--ghost hidden" id="leave" type="button">Leave circle</button>
+      <button class="btn btn--ghost" id="logout" type="button">Log out</button>
+    </div>
+  </header>
+
+  <p id="loading" class="center-msg" role="status">Loading…</p>
+
+  <!-- Shown when the user has no circle yet -->
+  <main id="gate" class="gate hidden">
+    <div class="gate__intro">
+      <h1>Start your circle</h1>
+      <p>A circle is your family or group. Create one or join with an invite code.</p>
+    </div>
+    <div class="gate__cards">
+      <form id="create-form" class="panel" novalidate>
+        <h2>Create a circle</h2>
+        <label for="circle-name-input">Circle name</label>
+        <input id="circle-name-input" type="text" maxlength="30" placeholder="Family">
+        <p class="error" id="create-error" role="alert"></p>
+        <button class="btn" type="submit">Create circle</button>
+      </form>
+
+      <form id="join-form" class="panel" novalidate>
+        <h2>Join with a code</h2>
+        <label for="code-input">Invite code</label>
+        <input id="code-input" type="text" maxlength="6" autocapitalize="characters" autocomplete="off" placeholder="6 characters">
+        <p class="error" id="join-error" role="alert"></p>
+        <button class="btn" type="submit">Join circle</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Shown when the user is in a circle -->
+  <main id="circle-view" class="dash hidden">
+    <section class="panel trip-panel" aria-label="Route">
+      <h3>Route</h3>
+
+      <form class="trip" id="trip-form" novalidate>
+        <label for="trip-from">From</label>
+        <input id="trip-from" type="text" maxlength="80" autocomplete="off" placeholder="Where are you coming from?">
+        <label for="trip-to">To</label>
+        <input id="trip-to" type="text" maxlength="80" autocomplete="off" placeholder="Where are you going?">
+        <p class="error" id="trip-error" role="alert"></p>
+        <div class="trip-actions">
+          <button class="btn" id="trip-submit" type="submit">Submit</button>
+          <button class="btn btn--done" id="trip-done" type="button" disabled>Done</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel duty" aria-label="Duty">
+      <p class="duty__label">Your status</p>
+      <p class="duty__state" id="duty-state">Off duty</p>
+      <button id="share-btn" class="duty__btn" type="button" disabled>Start your duty</button>
+      <p class="hint" id="duty-status" role="status">Submit your route first, then tap Start your duty. The route is locked while you're on duty. Tap End your duty when you arrive, then submit the next route. While on duty, your location updates every 30 seconds.</p>
+    </section>
+
+    <section class="panel" aria-label="Members">
+      <h3>Members <span class="count" id="member-count">0</span></h3>
+      <ul id="members" class="members"></ul>
+    </section>
+  </main>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RGCD – Admin Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #12263a;
+      --paper: #eef1f4;
+      --surface: #ffffff;
+      --line: #d3dae1;
+      --duty: #1f8a5b;
+      --duty-deep: #166845;
+      --amber: #f2b01e;
+      --danger: #c0392b;
+      --muted: #5d6c7b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e8eef4;
+        --paper: #0e1a26;
+        --surface: #162636;
+        --line: #26394c;
+        --duty: #2fb87e;
+        --duty-deep: #25a06b;
+        --muted: #93a3b3;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; }
+    body {
+      font-family: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--paper); color: var(--ink); line-height: 1.5;
+      display: grid; place-items: center; min-height: 100vh; padding: 24px 20px;
+    }
+    .login { width: 100%; max-width: 400px; }
+    .brandrow { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .brand { font-weight: 800; letter-spacing: .04em; font-size: 1.2rem; }
+    .role { font-size: .75rem; background: var(--amber); color: #12263a; padding: 2px 10px; border-radius: 999px; font-weight: 700; }
+    h1 { font-size: 1.7rem; line-height: 1.15; margin: 0 0 6px; }
+    .lead { color: var(--muted); margin: 0 0 22px; font-size: .95rem; }
+    .panel {
+      background: var(--surface); border: 1px solid var(--line);
+      border-top: 6px solid var(--duty); border-radius: 14px; padding: 24px;
+    }
+    label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 6px; }
+    input {
+      width: 100%; font: inherit; color: var(--ink);
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: 10px; padding: 11px 12px; margin-bottom: 14px;
+    }
+    .pw { position: relative; margin-bottom: 14px; }
+    .pw input { margin-bottom: 0; padding-right: 46px; }
+    .pw__toggle {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      width: 36px; height: 36px; display: grid; place-items: center;
+      background: transparent; border: 0; border-radius: 8px; cursor: pointer; color: var(--muted);
+    }
+    .pw__toggle:hover { color: var(--ink); }
+    .pw__toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .pw__toggle .eye-off { display: none; }
+    .pw__toggle[aria-pressed="true"] .eye { display: none; }
+    .pw__toggle[aria-pressed="true"] .eye-off { display: block; }
+    .btn {
+      width: 100%; font: inherit; font-weight: 700; cursor: pointer;
+      background: var(--duty); color: #fff; border: 0; padding: 12px 20px; border-radius: 10px;
+    }
+    .btn:hover { background: var(--duty-deep); }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .error { color: var(--danger); font-size: .85rem; min-height: 1.3em; margin: 0 0 12px; }
+    .back { display: block; text-align: center; margin-top: 18px; font-size: .85rem; color: var(--muted); }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <main class="login">
+    <div class="brandrow">
+      <strong class="brand">REGCRIS</strong>
+      <span class="role">Admin</span>
+    </div>
+    <h1>Admin login</h1>
+    <p class="lead">Sign in to track your drivers in real time.</p>
+
+    <form id="login-form" class="panel" novalidate>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="username" placeholder="admin@email.com">
+
+      <label for="password">Password</label>
+      <div class="pw">
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+        <button class="pw__toggle" id="toggle-pw" type="button" aria-label="Show password" aria-pressed="false">
+          <svg class="eye" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M17.94 17.94A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a19.8 19.8 0 0 1 5.06-5.94"/>
+            <path d="M9.9 4.24A10.4 10.4 0 0 1 12 5c7 0 11 7 11 7a19.9 19.9 0 0 1-3.17 4.19"/>
+            <path d="M14.12 14.12A3 3 0 1 1 9.88 9.88"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="error" id="error" role="alert"></p>
+      <button class="btn" id="submit" type="submit">Log in</button>
+    </form>
+
+    <a class="back" href="index.html">Driver login</a>
+  </main>
+
+  <script type="module">
+    import { app as driverApp } from "./firebase-config.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      initializeAuth, browserSessionPersistence,
+      onAuthStateChanged, signInWithEmailAndPassword, signOut,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Separate Firebase app for admins; its login lives only in this tab,
+    // so it never replaces a driver's login in another tab.
+    const app = initializeApp(driverApp.options, "admin");
+    const auth = initializeAuth(app, { persistence: browserSessionPersistence });
+    const db = getFirestore(app);
+    const $ = (id) => document.getElementById(id);
+
+    // Rules only allow this read for emails in the admin list
+    async function isAdmin() {
+      try {
+        await getDoc(doc(db, "admins", "check"));
+        return true;
+      } catch (err) {
+        if (err.code === "permission-denied") return false;
+        throw err;
+      }
+    }
+
+    function friendly(err) {
+      switch (err.code) {
+        case "auth/invalid-credential":
+        case "auth/wrong-password":
+        case "auth/user-not-found":
+          return "Wrong email or password.";
+        case "auth/invalid-email":
+          return "Enter a valid email.";
+        case "auth/too-many-requests":
+          return "Too many attempts. Try again in a few minutes.";
+        case "auth/network-request-failed":
+          return "No internet connection.";
+        default:
+          return "Something went wrong. (" + (err.code || err.message) + ")";
+      }
+    }
+
+    // Already signed in as an admin? Go straight to the dashboard.
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+      try {
+        if (await isAdmin()) window.location.replace("admin.html");
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    $("toggle-pw").addEventListener("click", () => {
+      const input = $("password");
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      const btn = $("toggle-pw");
+      btn.setAttribute("aria-pressed", String(show));
+      btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      input.focus();
+    });
+
+    $("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = $("email").value.trim();
+      const password = $("password").value;
+      $("error").textContent = "";
+
+      if (!email || !password) {
+        $("error").textContent = "Enter your email and password.";
+        return;
+      }
+
+      $("submit").disabled = true;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        if (await isAdmin()) {
+          window.location.replace("admin.html");
+        } else {
+          await signOut(auth);
+          $("error").textContent = "This account doesn't have admin access.";
+        }
+      } catch (err) {
+        $("error").textContent = friendly(err);
+      } finally {
+        $("submit").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

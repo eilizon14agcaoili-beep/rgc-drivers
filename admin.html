@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>RGCD – Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <style>
+    :root {
+      --ink: #12263a;
+      --paper: #eef1f4;
+      --surface: #ffffff;
+      --line: #d3dae1;
+      --duty: #1f8a5b;
+      --amber: #f2b01e;
+      --danger: #c0392b;
+      --muted: #5d6c7b;
+      --select: #e3f3ea;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e8eef4;
+        --paper: #0e1a26;
+        --surface: #162636;
+        --line: #26394c;
+        --duty: #2fb87e;
+        --muted: #93a3b3;
+        --select: #1c3a30;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--paper); color: var(--ink); line-height: 1.5;
+      display: flex; flex-direction: column;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .hidden { display: none !important; }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; padding: 12px 20px;
+      background: var(--ink); color: var(--paper);
+    }
+    @media (prefers-color-scheme: dark) {
+      .topbar { background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--line); }
+    }
+    .topbar__left, .topbar__right { display: flex; align-items: center; gap: 12px; }
+    .brand { font-weight: 800; letter-spacing: .04em; }
+    .role { font-size: .75rem; background: var(--amber); color: #12263a; padding: 2px 10px; border-radius: 999px; font-weight: 700; }
+    #user-name { font-size: .9rem; opacity: .9; }
+    .btn {
+      font: inherit; font-size: .85rem; font-weight: 600; cursor: pointer;
+      background: transparent; color: inherit; border: 1px solid currentColor;
+      padding: 6px 14px; border-radius: 10px;
+    }
+
+    .center-msg { text-align: center; color: var(--muted); padding: 48px 20px; }
+
+    .admin {
+      flex: 1; min-height: 0; display: grid;
+      grid-template-columns: 340px 1fr;
+    }
+    .side {
+      overflow-y: auto; border-right: 1px solid var(--line);
+      background: var(--surface); padding: 16px;
+    }
+    .side h2 { font-size: .95rem; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .side h2 + ul { margin-bottom: 24px; }
+    .count {
+      font-size: .75rem; min-width: 1.6em; text-align: center; padding: 1px 8px;
+      background: var(--ink); color: var(--paper); border-radius: 999px;
+    }
+    .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .row {
+      width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+      background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+      padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+    }
+    .row:hover { border-color: var(--duty); }
+    .row.is-selected { background: var(--select); border-color: var(--duty); }
+    .row__main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .row__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row__sub { font-size: .8rem; color: var(--muted); }
+    .badge {
+      font-size: .75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+      background: var(--paper); border: 1px solid var(--line); color: var(--muted); flex: none;
+    }
+    .badge.is-live { background: var(--duty); border-color: var(--duty); color: #fff; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%; color: #fff; flex: none;
+      display: grid; place-items: center; font-weight: 700;
+    }
+    .empty { color: var(--muted); font-size: .85rem; margin: 0 0 24px; }
+
+
+    .circle-li { display: flex; gap: 6px; align-items: stretch; }
+    .circle-li .row { flex: 1; min-width: 0; }
+    .circle-li .act { flex: none; align-self: center; padding: 6px 10px; }
+
+    .search {
+      width: 100%; font: inherit; color: var(--ink); background: var(--paper);
+      border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 10px;
+    }
+    .badge.is-off { opacity: .8; }
+
+    /* manage panel */
+    .manage { margin-bottom: 24px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+    .manage h2 { margin-bottom: 4px; }
+    .manage__hint { font-size: .8rem; color: var(--muted); margin: 0 0 10px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .act {
+      font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer;
+      padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line);
+      background: var(--surface); color: var(--ink);
+    }
+    .act:disabled { opacity: .5; cursor: not-allowed; }
+    .act--warn { border-color: var(--amber); }
+    .act--danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .mrow {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+    }
+    .mrow.is-inactive { border-color: var(--amber); }
+    .mrow .act { padding: 4px 10px; flex: none; }
+    .notice { font-size: .8rem; margin: 10px 0 0; color: var(--muted); min-height: 1.2em; }
+    .notice.error { color: var(--danger); }
+
+    .main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    .mapwrap { position: relative; flex: 1 1 0; min-height: 260px; }
+    .trips {
+      flex: 0 0 auto; max-height: 40%; overflow-y: auto;
+      background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px 16px;
+    }
+    .trips h2 { font-size: .95rem; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .trips__scope { font-weight: 400; color: var(--muted); font-size: .8rem; }
+    .table-wrap { overflow-x: auto; }
+    .table { width: 100%; border-collapse: collapse; font-size: .85rem; min-width: 780px; }
+    .table th {
+      text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+      color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; background: var(--surface);
+    }
+    .table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .table tr:last-child td { border-bottom: 0; }
+    .trips .empty { margin: 8px 0 0; }
+    .badge.ok { background: var(--duty); border-color: var(--duty); color: #fff; }
+    .badge.bad { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .dest { background: none; border: 0; font-size: 26px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
+    #map { position: absolute; inset: 0; }
+    .map-note {
+      position: absolute; z-index: 500; left: 12px; bottom: 12px;
+      background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+      border-radius: 10px; padding: 6px 12px; font-size: .8rem;
+    }
+
+    .pin span {
+      display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+      color: #fff; font-weight: 700; border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+    .leaflet-tooltip.pin-label {
+      font-family: inherit; font-weight: 600; border-radius: 8px;
+    }
+
+    @media (max-width: 800px) {
+      .admin { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+      .main { order: -1; }
+      .mapwrap { flex: none; height: 50vh; min-height: 0; }
+      .trips { max-height: none; }
+      .side { border-right: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__left">
+      <strong class="brand">REGCRIS</strong>
+      <span class="role">Admin</span>
+    </div>
+    <div class="topbar__right">
+      <span id="user-name"></span>
+      <button class="btn" id="logout" type="button">Log out</button>
+    </div>
+  </header>
+
+  <p id="loading" class="center-msg" role="status">Loading…</p>
+  <p id="denied" class="center-msg hidden" role="alert">This account doesn't have admin access.</p>
+
+  <main id="admin" class="admin hidden">
+    <aside class="side" aria-label="Circles and drivers">
+      <p class="notice error hidden" id="load-error" role="alert"></p>
+      <h2>Circles <span class="count" id="circle-count">0</span></h2>
+      <ul class="list" id="circles"></ul>
+
+
+      <section class="manage hidden" id="manage" aria-label="Manage circle">
+        <h2 id="manage-title">Manage circle</h2>
+        <p class="manage__hint">Members who are off duty and inactive for 7+ days are highlighted.</p>
+        <div class="actions">
+          <button class="act act--warn" id="remove-inactive" type="button">Remove inactive</button>
+          <button class="act act--danger" id="delete-circle" type="button">Delete circle</button>
+        </div>
+        <ul class="list" id="members-list"></ul>
+        <p class="notice" id="notice" role="status"></p>
+      </section>
+
+      <h2 id="drivers-title">Drivers on duty <span class="count" id="driver-count">0</span></h2>
+      <ul class="list" id="drivers"></ul>
+      <p class="empty hidden" id="drivers-empty">No driver is on duty right now.</p>
+
+      <h2 style="margin-top:24px">All accounts <span class="count" id="account-count">0</span></h2>
+      <input class="search" id="account-search" type="search" placeholder="Search name, email or circle" aria-label="Search accounts">
+      <ul class="list" id="accounts"></ul>
+      <p class="empty hidden" id="accounts-empty">No accounts found.</p>
+      <p class="notice" id="project-note"></p>
+    </aside>
+
+    <div class="main">
+    <section class="mapwrap" aria-label="Live map">
+      <div id="map"></div>
+      <p class="map-note" id="map-note">Showing all circles</p>
+    </section>
+
+      <section class="trips" aria-label="Trips">
+        <h2>Trips <span class="count" id="trip-count">0</span> <span class="trips__scope" id="trip-scope"></span></h2>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Driver</th><th>Circle</th><th>From</th><th>To</th><th>Date</th><th>Time</th><th>Status</th><th>Arrival</th>
+              </tr>
+            </thead>
+            <tbody id="trips-body"></tbody>
+          </table>
+        </div>
+        <p class="empty hidden" id="trips-empty">No trips yet.</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- Leaflet must load BEFORE the module script -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>
