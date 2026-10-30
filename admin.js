@@ -55,7 +55,22 @@ function showLoadError(label, err) {
   el.classList.remove("hidden");
 }
 
+function setTab(name) {
+  $("admin").dataset.active = name;
+  document.querySelectorAll("#tabbar button").forEach((b) => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle("is-active", on);
+    if (on) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+  if (name === "map" && map) setTimeout(() => map.invalidateSize(), 0);   // map was hidden
+}
+document.querySelectorAll("#tabbar button").forEach((b) => {
+  b.addEventListener("click", () => setTab(b.dataset.tab));
+});
+
 function show(which) {
+  $("tabbar").classList.toggle("hidden", which !== "admin");
   $("loading").classList.toggle("hidden", which !== "loading");
   $("denied").classList.toggle("hidden", which !== "denied");
   $("admin").classList.toggle("hidden", which !== "admin");
@@ -492,12 +507,15 @@ function renderTrips() {
       t.startedAt ? fmtDate(t.startedAt) : "—",
       t.startedAt ? fmtTime(t.startedAt) : "—",
     ];
-    for (const text of cells) {
+    const labels = ["Driver", "Circle", "From", "To", "Date", "Time"];
+    cells.forEach((text, i) => {
       const td = document.createElement("td");
+      td.dataset.label = labels[i];
       td.textContent = text;
       tr.append(td);
-    }
+    });
     const st = document.createElement("td");
+    st.dataset.label = "Status";
     const badge = document.createElement("span");
     const done = t.status === "done";
     badge.className = "badge" + (done ? "" : " is-live");
@@ -506,6 +524,7 @@ function renderTrips() {
     tr.append(st);
 
     const ar = document.createElement("td");
+    ar.dataset.label = "Arrival";
     const info = arrivalInfo(t, circle);
     const ab = document.createElement("span");
     ab.className = "badge" + (info.cls ? " " + info.cls : "");
@@ -780,6 +799,7 @@ async function deleteCircle(c) {
   }
 }
 
+$("view-map").addEventListener("click", () => setTab("map"));
 $("remove-inactive").addEventListener("click", removeInactive);
 $("delete-circle").addEventListener("click", () => {
   const c = selected ? circles.get(selected) : null;
