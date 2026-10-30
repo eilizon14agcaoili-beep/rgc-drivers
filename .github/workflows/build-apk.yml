@@ -1,0 +1,60 @@
+name: Build Android APK
+
+# Run it by hand: GitHub repo -> Actions -> "Build Android APK" -> Run workflow
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Uses the "www" folder if the repo has one, otherwise the files at the top level
+      - name: Collect web files
+        run: |
+          mkdir -p _apk/www
+          if [ -d www ]; then
+            cp -r www/. _apk/www/
+          else
+            cp ./*.html ./*.js ./*.css _apk/www/ 2>/dev/null || true
+            cp ./*.jpg ./*.jpeg ./*.png ./*.svg ./*.ico ./*.webp _apk/www/ 2>/dev/null || true
+          fi
+          ls -la _apk/www
+
+      - name: Create Capacitor Android project
+        working-directory: _apk
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npx cap init "RGC Driver" com.rgc.driver --web-dir=www
+          npx cap add android
+
+      - name: Add location permissions
+        working-directory: _apk
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<application|<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-feature android:name="android.hardware.location.gps" />\n    <application|' "$MANIFEST"
+          grep -n "uses-permission\|uses-feature" "$MANIFEST"
+
+      - name: Build debug APK
+        working-directory: _apk
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rgc-driver-apk
+          path: _apk/android/app/build/outputs/apk/debug/app-debug.apk
