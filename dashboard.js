@@ -71,6 +71,143 @@ function setStatus(text, type = "default") {
 }
 
 // ---------- start ----------
+// ---------- first-time tutorial ----------
+const TUTORIAL = [
+  {
+    title: "Gumawa ng circle",
+    lines: [
+      "Ang circle ay ang grupo ninyo, halimbawa ang team ng mga driver ng company.",
+      "Sa screen na “Start your circle”, ilagay ang pangalan ng circle sa “Create a circle”, tapos pindutin ang Create circle.",
+    ],
+    tip: "Pagkagawa, may 6-character na Code sa taas. Pindutin ang Copy at ibigay ito sa mga kasama mo para makasali sila.",
+  },
+  {
+    title: "Sumali gamit ang code",
+    lines: [
+      "Kung may circle na ang team ninyo, humingi ng 6-character na code sa gumawa nito.",
+      "I-type ang code sa “Join with a code”, tapos pindutin ang Join circle.",
+    ],
+    tip: "Isang circle lang ang pwede mong salihan sa isang pagkakataon.",
+  },
+  {
+    title: "Gamitin ang Route",
+    lines: [
+      "Bago mag-duty, punan ang Route: ang From (galing mo) at ang To (pupuntahan mo).",
+      "Habang nagta-type, may lalabas na listahan ng mga lugar. Piliin ang tamang lugar para makilala ito ng mapa at ma-check ng admin kung nakarating ka.",
+      "Pagkatapos, pindutin ang Submit.",
+    ],
+  },
+  {
+    title: "Start your duty",
+    lines: [
+      "Naka-disable ang Start your duty hangga’t hindi ka pa nakakapag-Submit ng route.",
+      "Pagkatapos mag-Submit, saka mo pa lang mapipindot ang Start your duty. Mala-lock ang route habang naka-duty.",
+    ],
+    tip: "Habang naka-duty, nakikita ng admin ang location mo. Panatilihing bukas ang app at naka-on ang screen.",
+  },
+  {
+    title: "Pagdating sa pupuntahan",
+    lines: [
+      "Pagdating mo sa pupuntahan, pindutin ang End your duty.",
+      "Pagkatapos, pindutin ang Done.",
+    ],
+    tip: "Hindi mapipindot ang Done hangga’t hindi ka pa nakakapag-End your duty.",
+  },
+  {
+    title: "Pabalik sa company",
+    lines: [
+      "Kung pabalik ka na sa company, mag-Submit ulit ng bagong route (From at To).",
+      "Ulitin ang parehong proseso: Start your duty, End your duty, tapos Done. Ganito sa bawat biyahe.",
+    ],
+    tip: "Pwede mong buksan ulit ang gabay na ito anumang oras sa button na “How to use” sa taas.",
+  },
+];
+
+let tutStep = 0;
+let tutReturnFocus = null;
+
+function tutorialSeenLocally() {
+  try { return localStorage.getItem("tutorialDone:" + me.uid) === "1"; } catch { return false; }
+}
+
+function renderTutorial() {
+  const s = TUTORIAL[tutStep];
+  const last = tutStep === TUTORIAL.length - 1;
+  $("tut-count").textContent = "Step " + (tutStep + 1) + " of " + TUTORIAL.length;
+  $("tut-title").textContent = s.title;
+
+  const body = $("tut-body");
+  body.replaceChildren();
+  for (const line of s.lines) {
+    const p = document.createElement("p");
+    p.textContent = line;
+    body.append(p);
+  }
+  if (s.tip) {
+    const tip = document.createElement("p");
+    tip.className = "modal__tip";
+    tip.textContent = s.tip;
+    body.append(tip);
+  }
+
+  const dots = $("tut-dots");
+  dots.replaceChildren();
+  TUTORIAL.forEach((_, i) => {
+    const dot = document.createElement("span");
+    if (i === tutStep) dot.className = "is-on";
+    dots.append(dot);
+  });
+
+  $("tut-back").disabled = tutStep === 0;
+  $("tut-skip").classList.toggle("hidden", last);
+  $("tut-next").textContent = last ? "Got it" : "Next";
+}
+
+function openTutorial(startAt = 0) {
+  tutStep = startAt;
+  tutReturnFocus = document.activeElement;
+  renderTutorial();
+  $("tutorial").classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+  $("tut-next").focus();
+}
+
+function closeTutorial() {
+  $("tutorial").classList.add("hidden");
+  document.body.style.overflow = "";
+  if (tutReturnFocus && tutReturnFocus.focus) tutReturnFocus.focus();
+  // remember it, so it only pops up by itself the first time
+  try { localStorage.setItem("tutorialDone:" + me.uid, "1"); } catch { /* ignore */ }
+  setDoc(doc(db, "users", me.uid), { tutorialDone: true }, { merge: true })
+    .catch((err) => console.warn("tutorial flag not saved", err));
+}
+
+function maybeShowTutorial(doneInProfile) {
+  if (doneInProfile || tutorialSeenLocally()) return;
+  openTutorial(0);
+}
+
+$("tut-next").addEventListener("click", () => {
+  if (tutStep >= TUTORIAL.length - 1) closeTutorial();
+  else { tutStep++; renderTutorial(); }
+});
+$("tut-back").addEventListener("click", () => {
+  if (tutStep > 0) { tutStep--; renderTutorial(); }
+});
+$("tut-skip").addEventListener("click", closeTutorial);
+$("help-btn").addEventListener("click", () => openTutorial(0));
+
+$("tutorial").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeTutorial(); return; }
+  if (e.key !== "Tab") return;
+  // keep keyboard focus inside the pop-up
+  const items = [...$("tutorial").querySelectorAll("button:not([disabled]):not(.hidden)")];
+  if (!items.length) return;
+  const first = items[0], lastEl = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); lastEl.focus(); }
+  else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); first.focus(); }
+});
+
 // If users/{uid}.circleId is empty but the person is still a member of a circle
 // (for example the profile write failed or was overwritten), find that circle again.
 async function recoverCircleId() {
@@ -123,10 +260,12 @@ onAuthStateChanged(auth, async (user) => {
 
   try {
     const snap = await getDoc(doc(db, "users", me.uid));
-    let circleId = snap.exists() ? snap.data().circleId : null;
+    const profileData = snap.exists() ? snap.data() : {};
+    let circleId = profileData.circleId || null;
     if (!circleId) circleId = await recoverCircleId();   // self-heal if the profile lost its circle
     if (circleId) await openCircle(circleId);
     else show("gate");
+    maybeShowTutorial(!!profileData.tutorialDone);       // pops up once for new accounts
   } catch (err) {
     showFatal(err);
   }
@@ -297,6 +436,128 @@ function setTripPref(t) {
   } catch { /* ignore */ }
 }
 
+// ---------- place suggestions while typing (Photon, OpenStreetMap data) ----------
+const PHOTON_URL = "https://photon.komoot.io/api/";
+const PH_BBOX = "116.0,4.0,127.0,21.5";   // lon/lat box around the Philippines
+const picked = { from: null, to: null };   // place chosen from the suggestions: { text, lat, lng, bbox }
+
+function placeLabel(p) {
+  const parts = [p.name, [p.housenumber, p.street].filter(Boolean).join(" "), p.district, p.city || p.county, p.state];
+  const out = [];
+  for (const x of parts) if (x && !out.includes(x)) out.push(x);
+  return out.slice(0, 4).join(", ");
+}
+
+async function searchPlaces(q, signal) {
+  const url = PHOTON_URL + "?limit=6&lang=en&lat=14.5995&lon=120.9842&bbox=" + PH_BBOX +
+    "&q=" + encodeURIComponent(q);
+  const res = await fetch(url, { signal });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const seen = new Set();
+  const out = [];
+  for (const f of data.features || []) {
+    const p = f.properties || {};
+    const label = placeLabel(p);
+    if (!label || seen.has(label) || !f.geometry) continue;
+    seen.add(label);
+    const [lng, lat] = f.geometry.coordinates;
+    const ext = p.extent;   // [minLon, maxLat, maxLon, minLat]
+    out.push({
+      label,
+      main: p.name || [p.housenumber, p.street].filter(Boolean).join(" ") || label.split(",")[0],
+      lat, lng,
+      bbox: ext ? [ext[3], ext[1], ext[0], ext[2]] : null,   // [south, north, west, east]
+    });
+  }
+  return out;
+}
+
+function attachSuggest(input, list, key) {
+  let timer = null, ctrl = null, items = [], active = -1;
+
+  const close = () => {
+    list.classList.add("hidden");
+    list.replaceChildren();
+    items = [];
+    active = -1;
+    input.setAttribute("aria-expanded", "false");
+  };
+
+  const choose = (it) => {
+    input.value = it.label;
+    picked[key] = { text: it.label, lat: it.lat, lng: it.lng, bbox: it.bbox };
+    close();
+  };
+
+  const mark = () => {
+    [...list.querySelectorAll(".ac__item")].forEach((el, i) => el.classList.toggle("is-active", i === active));
+  };
+
+  const render = (noMatch) => {
+    list.replaceChildren();
+    if (!items.length) {
+      if (!noMatch) { close(); return; }
+      const li = document.createElement("li");
+      li.className = "ac__empty";
+      li.textContent = "No matches. You can still type your own place.";
+      list.append(li);
+    }
+    items.forEach((it, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ac__item";
+      const b = document.createElement("b");
+      b.textContent = it.main;
+      const small = document.createElement("small");
+      small.textContent = it.label.slice(it.main.length).replace(/^,\s*/, "");
+      btn.append(b, small);
+      btn.addEventListener("click", () => choose(it));
+      li.append(btn);
+      list.append(li);
+    });
+    list.classList.remove("hidden");
+    input.setAttribute("aria-expanded", "true");
+  };
+
+  input.addEventListener("input", () => {
+    if (picked[key] && picked[key].text !== input.value) picked[key] = null;   // edited after choosing
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 3 || input.disabled) { close(); return; }
+    timer = setTimeout(async () => {
+      if (ctrl) ctrl.abort();
+      ctrl = new AbortController();
+      try {
+        items = await searchPlaces(q, ctrl.signal);
+        active = -1;
+        render(true);
+      } catch (err) {
+        if (err.name !== "AbortError") close();   // offline etc: the field still works as plain text
+      }
+    }, 350);
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (list.classList.contains("hidden") || !items.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); active = (active + 1) % items.length; mark(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = (active - 1 + items.length) % items.length; mark(); }
+    else if (e.key === "Enter" && active >= 0) { e.preventDefault(); choose(items[active]); }
+    else if (e.key === "Escape") { close(); }
+  });
+
+  document.addEventListener("pointerdown", (e) => {
+    if (!input.parentElement.contains(e.target)) close();
+  });
+
+  return close;
+}
+
+const closeFromList = attachSuggest($("trip-from"), $("trip-from-list"), "from");
+const closeToList = attachSuggest($("trip-to"), $("trip-to-list"), "to");
+
 // ---------- destination lookup + arrival check ----------
 const GEO_COUNTRY = "ph";            // limit place search to the Philippines ("" = worldwide)
 const ARRIVE_RADIUS_M = 150;         // within this distance of the destination = arrived
@@ -316,9 +577,9 @@ async function geocode(text) {
     const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1" +
       (GEO_COUNTRY ? "&countrycodes=" + GEO_COUNTRY : "") + "&q=" + encodeURIComponent(text);
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) return await photonFirst(text);
     const arr = await res.json();
-    if (!arr.length) return null;
+    if (!arr.length) return await photonFirst(text);
     const r = arr[0];
     const bb = (r.boundingbox || []).map(Number);   // [south, north, west, east]
     return {
@@ -327,6 +588,16 @@ async function geocode(text) {
       bbox: bb.length === 4 && bb.every(Number.isFinite) ? bb : null,
       label: String(r.display_name || "").slice(0, 120),
     };
+  } catch {
+    return await photonFirst(text);
+  }
+}
+
+// second opinion when Nominatim can't find the place
+async function photonFirst(text) {
+  try {
+    const r = (await searchPlaces(text))[0];
+    return r ? { lat: r.lat, lng: r.lng, bbox: r.bbox, label: r.label.slice(0, 120) } : null;
   } catch {
     return null;
   }
@@ -373,7 +644,9 @@ async function submitTrip() {
   }
   try {
     setStatus("Looking up your destination…", "refreshing");
-    const geo = await geocode(to);
+    const pf = picked.from && picked.from.text === from ? picked.from : null;
+    const pt = picked.to && picked.to.text === to ? picked.to : null;
+    const geo = pt ? { lat: pt.lat, lng: pt.lng, bbox: pt.bbox, label: pt.text } : await geocode(to);
     const ref = await addDoc(collection(db, "circles", circle.id, "trips"), {
       uid: me.uid,
       name: me.name,
@@ -381,6 +654,8 @@ async function submitTrip() {
       to: to.slice(0, 80),
       startedAt: Date.now(),
       status: "ongoing",
+      fromLat: pf ? pf.lat : null,
+      fromLng: pf ? pf.lng : null,
       toLat: geo ? geo.lat : null,
       toLng: geo ? geo.lng : null,
       toBbox: geo ? geo.bbox : null,
@@ -443,6 +718,7 @@ function updateTripUI() {
   }
   from.disabled = has;
   to.disabled = has;
+  if (has) { closeFromList(); closeToList(); }
   const submit = $("trip-submit");
   submit.disabled = has;
   submit.textContent = has ? "Submitted" : "Submit";
@@ -472,25 +748,90 @@ function releaseWakeLock() {
   if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
 
+let locationBusySince = 0;
+let preciseWritten = false;
+
+// Updates the open trip (duty start / end) so the admin can tell who should be on duty
+async function patchTrip(fields) {
+  if (!currentTrip || !circle) return;
+  try {
+    await updateDoc(doc(db, "circles", circle.id, "trips", currentTrip.id), fields);
+  } catch (err) {
+    console.warn("couldn't update trip", err);
+  }
+}
+
+// Tells the admin WHY there is no location (shown next to "No signal")
+let lastIssue = null;
+let lastIssueAt = 0;
+let firstWriteDone = false;
+let locWatchdog = null;
+
+function reportLocIssue(text) {
+  if (!currentTrip) return;
+  if (text === lastIssue && Date.now() - lastIssueAt < 120000) return;   // don't repeat the same message
+  lastIssue = text;
+  lastIssueAt = Date.now();
+  patchTrip({ locIssue: text, locIssueAt: lastIssueAt });
+}
+
+function clearLocIssue() {
+  if (!lastIssue) return;
+  lastIssue = null;
+  patchTrip({ locIssue: null });
+}
+
 function startSharing() {
   if (!navigator.geolocation) {
     const errText = "This device can't share location.";
     setStatus(errText, "error");
     showToast(errText, true);
+    reportLocIssue(errText);
     return;
   }
   sharing = true;
   lastPos = null;
+  preciseWritten = false;
+  firstWriteDone = false;
+  lastIssue = null;
+  clearTimeout(locWatchdog);
+  locWatchdog = setTimeout(() => {
+    if (sharing && !firstWriteDone) reportLocIssue("No location received yet. Check that Location is allowed and turned on.");
+  }, 60000);
   updateShareButton();
   stampDuty();
+  if (currentTrip && !currentTrip.dutyStartedAt) {
+    currentTrip.dutyStartedAt = Date.now();
+    setTripPref(currentTrip);
+    patchTrip({ dutyStartedAt: currentTrip.dutyStartedAt, dutyEndedAt: null });
+  } else {
+    patchTrip({ dutyEndedAt: null });
+  }
   setStatus("Starting your duty… please allow location permission.", "refreshing");
   requestWakeLock();
+
+  // quick coarse fix so the pin shows up right away, even before GPS locks on
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      if (!sharing) return;
+      if (!lastPos) lastPos = pos;
+      writeLocation(pos);
+    },
+    () => { /* the GPS watch below keeps trying */ },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+  );
 
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const first = !lastPos;
       lastPos = pos;
-      if (first) writeLocation(pos);
+      // write the first precise GPS fix right away, then follow the 30-second timer
+      if (!preciseWritten && pos.coords.accuracy <= 100) {
+        preciseWritten = true;
+        writeLocation(pos);
+      } else if (first) {
+        writeLocation(pos);
+      }
     },
     onPositionError,
     { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
@@ -501,20 +842,36 @@ function startSharing() {
 }
 
 function locationTick() {
-  if (!sharing || !circle || locationBusy) return;
+  if (!sharing || !circle) return;
+  // a stuck request (some phones never answer while the app is in the background) must not block updates forever
+  if (locationBusy && Date.now() - locationBusySince < 25000) return;
   locationBusy = true;
+  locationBusySince = Date.now();
+  const done = () => { locationBusy = false; };
+
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       lastPos = pos;
-      writeLocation(pos).finally(() => { locationBusy = false; });
+      writeLocation(pos).finally(done);
     },
     () => {
-      if (lastPos && Date.now() - lastPos.timestamp < 60000) {
-        writeLocation(lastPos).finally(() => { locationBusy = false; });
-      } else {
-        locationBusy = false;
-        setStatus("Still looking for your location…", "refreshing");
-      }
+      // GPS didn't answer: try a coarse fix, then fall back to the last known position
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          lastPos = pos;
+          writeLocation(pos).finally(done);
+        },
+        () => {
+          if (lastPos && Date.now() - lastPos.timestamp < 60000) {
+            writeLocation(lastPos).finally(done);
+          } else {
+            done();
+            setStatus("Still looking for your location…", "refreshing");
+            reportLocIssue("Location timed out (weak GPS signal).");
+          }
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      );
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 8000 }
   );
@@ -531,17 +888,33 @@ async function writeLocation(pos) {
       accuracy: Math.round(accuracy),
       updatedAt: Date.now(),
     });
+    firstWriteDone = true;
+    clearTimeout(locWatchdog);
+    clearLocIssue();
     setStatus("You're on duty. " + circle.name + " can see your status.", "active");
     checkArrival(pos);
   } catch (err) {
     const errText = friendlyError(err);
     setStatus(errText, "error");
     showToast(errText, true);
+    reportLocIssue("Couldn't save location (" + (err.code || err.message) + ").");
   }
 }
 
 async function onPositionError(err) {
   if (err.code === 1) {
+    // Some phones report "denied" when the app is just in the background. Only stop if it is really blocked.
+    let blocked = true;
+    try {
+      const st = await navigator.permissions.query({ name: "geolocation" });
+      blocked = st.state === "denied";
+    } catch { /* permissions API not available: assume blocked */ }
+    if (!blocked) {
+      setStatus("Waiting for your location…", "refreshing");
+      reportLocIssue("Waiting for location permission.");
+      return;
+    }
+    reportLocIssue("Location permission is blocked on the phone.");
     setSharePref(false);
     await stopSharing();
     const errText = "Location is blocked. Please allow Location in your phone settings.";
@@ -549,12 +922,15 @@ async function onPositionError(err) {
     showToast(errText, true);
   } else if (err.code === 2) {
     setStatus("Your device can't find its location right now.", "refreshing");
+    reportLocIssue("The phone can't find its location (GPS/Location may be off).");
   } else {
     setStatus("Still looking for your location…", "refreshing");
+    reportLocIssue("Location timed out (weak GPS signal).");
   }
 }
 
 async function stopSharing(message) {
+  clearTimeout(locWatchdog);
   const finalPos = lastPos;     // last known position, for a final arrival check
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   if (locationTimer) clearInterval(locationTimer);
@@ -570,6 +946,7 @@ async function stopSharing(message) {
   if (wasSharing && circle) {
     await checkArrival(finalPos);
     if (currentTrip) {                 // duty ended: unlock Done (the route stays open until then)
+      await patchTrip({ dutyEndedAt: Date.now() });
       currentTrip.ended = true;
       setTripPref(currentTrip);
     }
@@ -615,6 +992,8 @@ $("trip-done").addEventListener("click", async () => {
   await closeTrip();
   $("trip-from").value = "";
   $("trip-to").value = "";
+  picked.from = null;
+  picked.to = null;
   updateShareButton();
   setStatus("Route done. Submit your next route to start again.");
 });
