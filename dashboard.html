@@ -168,6 +168,48 @@
     input:disabled { opacity: .6; cursor: not-allowed; }
     .btn--done { background: var(--ink); color: var(--paper); }
     .btn--done:hover { background: var(--ink); filter: brightness(1.15); }
+    /* first-time tutorial */
+    .modal {
+      position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+      padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+      background: rgba(6, 12, 20, .72);
+    }
+    .modal__card {
+      width: 100%; max-width: 440px; max-height: 100%; overflow-y: auto;
+      background: var(--surface); color: var(--ink);
+      border: 1px solid var(--line); border-top: 6px solid var(--duty);
+      border-radius: 16px; padding: 22px;
+    }
+    .modal__count { margin: 0 0 4px; font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .modal__title { margin: 0 0 12px; font-size: 1.3rem; line-height: 1.2; }
+    .modal__body p { margin: 0 0 10px; line-height: 1.5; }
+    .modal__tip {
+      margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; font-size: .88rem;
+      background: var(--paper); border: 1px solid var(--line); color: var(--muted);
+    }
+    .modal__dots { display: flex; justify-content: center; gap: 6px; margin: 18px 0 14px; }
+    .modal__dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+    .modal__dots span.is-on { background: var(--duty); }
+    .modal__actions { display: flex; align-items: center; gap: 8px; }
+    .modal__spacer { flex: 1; }
+    .modal__actions .btn { padding: 10px 16px; }
+    .modal__skip { border-color: transparent; color: var(--muted); }
+    /* place suggestions */
+    .ac { position: relative; }
+    .ac__list {
+      position: absolute; left: 0; right: 0; top: 100%; margin: -6px 0 0; padding: 4px;
+      list-style: none; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      z-index: 30; max-height: 240px; overflow-y: auto;
+    }
+    .ac__item {
+      display: block; width: 100%; text-align: left; background: none; border: 0;
+      color: var(--ink); font: inherit; padding: 9px 10px; border-radius: 8px; cursor: pointer;
+    }
+    .ac__item:hover, .ac__item.is-active { background: var(--paper); }
+    .ac__item b { display: block; font-size: .9rem; }
+    .ac__item small { display: block; color: var(--muted); font-size: .78rem; }
+    .ac__empty { padding: 9px 10px; color: var(--muted); font-size: .85rem; }
     .map-status, .hint { color: var(--muted); font-size: .85rem; margin: 22px auto 0; max-width: 40ch; }
 
     .count {
@@ -202,6 +244,7 @@
     </div>
     <div class="topbar__right">
       <span id="user-name"></span>
+      <button class="btn btn--ghost" id="help-btn" type="button">How to use</button>
       <button class="btn btn--ghost hidden" id="leave" type="button">Leave circle</button>
       <button class="btn btn--ghost" id="logout" type="button">Log out</button>
     </div>
@@ -241,9 +284,15 @@
 
       <form class="trip" id="trip-form" novalidate>
         <label for="trip-from">From</label>
-        <input id="trip-from" type="text" maxlength="80" autocomplete="off" placeholder="Where are you coming from?">
+        <div class="ac">
+          <input id="trip-from" type="text" maxlength="80" autocomplete="off" placeholder="Where are you coming from?" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="trip-from-list">
+          <ul class="ac__list hidden" id="trip-from-list" role="listbox"></ul>
+        </div>
         <label for="trip-to">To</label>
-        <input id="trip-to" type="text" maxlength="80" autocomplete="off" placeholder="Where are you going?">
+        <div class="ac">
+          <input id="trip-to" type="text" maxlength="80" autocomplete="off" placeholder="Where are you going?" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="trip-to-list">
+          <ul class="ac__list hidden" id="trip-to-list" role="listbox"></ul>
+        </div>
         <p class="error" id="trip-error" role="alert"></p>
         <div class="trip-actions">
           <button class="btn" id="trip-submit" type="submit">Submit</button>
@@ -256,7 +305,7 @@
       <p class="duty__label">Your status</p>
       <p class="duty__state" id="duty-state">Off duty</p>
       <button id="share-btn" class="duty__btn" type="button" disabled>Start your duty</button>
-      <p class="hint" id="duty-status" role="status">Submit your route first, then tap Start your duty. The route is locked while you're on duty. Tap End your duty when you arrive, then submit the next route. While on duty, your location updates every 30 seconds.</p>
+      <p class="hint" id="duty-status" role="status">Submit your route first, then tap Start your duty. The route is locked while you're on duty. Tap End your duty when you arrive, then tap Done and submit your next route.</p>
     </section>
 
     <section class="panel" aria-label="Members">
@@ -264,6 +313,22 @@
       <ul id="members" class="members"></ul>
     </section>
   </main>
+
+  <!-- First-time tutorial -->
+  <div class="modal hidden" id="tutorial" role="dialog" aria-modal="true" aria-labelledby="tut-title">
+    <div class="modal__card">
+      <p class="modal__count" id="tut-count"></p>
+      <h2 class="modal__title" id="tut-title"></h2>
+      <div class="modal__body" id="tut-body"></div>
+      <div class="modal__dots" id="tut-dots" aria-hidden="true"></div>
+      <div class="modal__actions">
+        <button class="btn btn--ghost modal__skip" id="tut-skip" type="button">Skip</button>
+        <span class="modal__spacer"></span>
+        <button class="btn btn--ghost" id="tut-back" type="button">Back</button>
+        <button class="btn" id="tut-next" type="button">Next</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="dashboard.js"></script>
 </body>
