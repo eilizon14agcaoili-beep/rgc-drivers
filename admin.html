@@ -88,6 +88,7 @@
     .row__main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
     .row__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .row__sub { font-size: .8rem; color: var(--muted); }
+    .badge { white-space: nowrap; }
     .badge {
       font-size: .75rem; font-weight: 700; padding: 2px 10px; border-radius: 999px;
       background: var(--paper); border: 1px solid var(--line); color: var(--muted); flex: none;
@@ -141,15 +142,65 @@
     .trips h2 { font-size: .95rem; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
     .trips__scope { font-weight: 400; color: var(--muted); font-size: .8rem; }
     .table-wrap { overflow-x: auto; }
-    .table { width: 100%; border-collapse: collapse; font-size: .85rem; min-width: 780px; }
+    .table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .88rem; min-width: 980px; }
     .table th {
-      text-align: left; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
-      color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line);
-      position: sticky; top: 0; background: var(--surface);
+      text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); padding: 10px 16px; border-bottom: 1px solid var(--line);
+      white-space: nowrap; position: sticky; top: 0; background: var(--surface); z-index: 1;
     }
-    .table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .table td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; line-height: 1.35; }
+    .table tbody tr:hover td { background: var(--paper); }
+    .table td:nth-child(1) { font-weight: 600; }
+    .table td:nth-child(1), .table td:nth-child(2) {
+      white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .table td:nth-child(3), .table td:nth-child(4) { min-width: 150px; }
+    .table td:nth-child(n+5) { white-space: nowrap; }
+    .table td:nth-child(5), .table td:nth-child(6) { color: var(--muted); }
     .table tr:last-child td { border-bottom: 0; }
     .trips .empty { margin: 8px 0 0; }
+    .trips__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .trips__head h2 { margin: 0; }
+    .trips__head .act { flex: none; }
+    .table td.td-action { text-align: right; white-space: nowrap; }
+    .table td.td-action .act { padding: 4px 10px; }
+    .map-fit {
+      position: absolute; z-index: 500; right: 12px; bottom: 30px;
+      background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+      border-radius: 10px; padding: 7px 12px; font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer;
+    }
+    /* driver history pop-up */
+    .modal {
+      position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center;
+      padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: rgba(6, 12, 20, .72);
+    }
+    .modal__card {
+      width: 100%; max-width: 980px; max-height: 100%; overflow-y: auto;
+      background: var(--surface); color: var(--ink);
+      border: 1px solid var(--line); border-top: 6px solid var(--duty);
+      border-radius: 16px; padding: 18px;
+    }
+    .modal__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .modal__head h2 { margin: 0; font-size: 1.15rem; }
+    .modal__sub { margin: 0 0 12px; color: var(--muted); font-size: .82rem; }
+    .hist-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .hist-chip {
+      padding: 8px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--paper); font-size: .78rem; color: var(--muted);
+    }
+    .hist-chip b { display: block; font-size: 1.2rem; color: var(--ink); }
+    .hist-filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+    .act.is-on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .htable { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .88rem; min-width: 760px; }
+    .htable th {
+      text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    }
+    .htable td { padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+    .htable td:nth-child(3), .htable td:nth-child(4) { white-space: normal; min-width: 130px; }
+    .htable tbody tr:hover td { background: var(--paper); }
+
     .badge.ok { background: var(--duty); border-color: var(--duty); color: #fff; }
     .badge.bad { background: var(--danger); border-color: var(--danger); color: #fff; }
     .dest { background: none; border: 0; font-size: 26px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
@@ -229,6 +280,29 @@
         display: flex; justify-content: space-between; align-items: center; gap: 12px;
         border: 0; padding: 4px 0; text-align: right;
       }
+      .table td:nth-child(n) {
+        white-space: normal; max-width: none; min-width: 0; overflow: visible; text-overflow: clip;
+      }
+      .table tbody tr:hover td { background: none; }
+      .htable { min-width: 0; }
+      .htable thead { display: none; }
+      .htable tr {
+        display: block; border: 1px solid var(--line); border-radius: 12px;
+        padding: 10px 12px; margin-bottom: 10px; background: var(--paper);
+      }
+      .htable td, .htable td:nth-child(3), .htable td:nth-child(4) {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        border: 0; padding: 4px 0; text-align: right; white-space: normal; min-width: 0;
+      }
+      .htable td::before {
+        content: attr(data-label); color: var(--muted); font-size: .72rem;
+        text-transform: uppercase; letter-spacing: .04em; text-align: left; flex: none;
+      }
+      .htable tbody tr:hover td { background: none; }
+      .modal__card { padding: 14px; }
+      .table td.td-action { justify-content: flex-end; }
+      .table td.td-action::before { content: none; }
+      .table td.td-action:empty { display: none; }
       .table td::before {
         content: attr(data-label); color: var(--muted); font-size: .72rem;
         text-transform: uppercase; letter-spacing: .04em; text-align: left; flex: none;
@@ -291,15 +365,20 @@
       <section class="mapwrap pane" data-tab="map" aria-label="Live map">
         <div id="map"></div>
         <p class="map-note" id="map-note">Showing all circles</p>
+        <button class="map-fit" id="fit-all" type="button">Show all drivers</button>
       </section>
 
       <section class="trips pane" data-tab="trips" aria-label="Trips">
-        <h2>Trips <span class="count" id="trip-count">0</span> <span class="trips__scope" id="trip-scope"></span></h2>
+        <div class="trips__head">
+          <h2>Trips <span class="count" id="trip-count">0</span> <span class="trips__scope" id="trip-scope"></span></h2>
+          <button class="act" id="clear-done" type="button" disabled>Clear done (0)</button>
+        </div>
+        <p class="notice" id="trips-notice" role="status"></p>
         <div class="table-wrap">
           <table class="table">
             <thead>
               <tr>
-                <th>Driver</th><th>Circle</th><th>From</th><th>To</th><th>Date</th><th>Time</th><th>Status</th><th>Arrival</th>
+                <th>Driver</th><th>Circle</th><th>From</th><th>To</th><th>Date</th><th>Time</th><th>Status</th><th>Arrival</th><th></th>
               </tr>
             </thead>
             <tbody id="trips-body"></tbody>
@@ -309,6 +388,34 @@
       </section>
     </div>
   </main>
+
+  <!-- Driver history -->
+  <div class="modal hidden" id="history" role="dialog" aria-modal="true" aria-labelledby="hist-title">
+    <div class="modal__card">
+      <div class="modal__head">
+        <h2 id="hist-title">History</h2>
+        <button class="act" id="hist-close" type="button">Close</button>
+      </div>
+      <p class="modal__sub" id="hist-sub"></p>
+      <div class="hist-summary" id="hist-summary"></div>
+      <div class="hist-filters" id="hist-filters">
+        <button class="act" type="button" data-range="7">Last 7 days</button>
+        <button class="act" type="button" data-range="30">Last 30 days</button>
+        <button class="act is-on" type="button" data-range="all">All</button>
+        <span style="flex:1"></span>
+        <button class="act" id="hist-csv" type="button" disabled>Download CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table class="htable">
+          <thead>
+            <tr><th>Date</th><th>Time</th><th>From</th><th>To</th><th>Duty time</th><th>Arrival</th><th>Status</th></tr>
+          </thead>
+          <tbody id="hist-body"></tbody>
+        </table>
+      </div>
+      <p class="empty hidden" id="hist-empty">No trips in this range.</p>
+    </div>
+  </div>
 
   <!-- Bottom navigation (phones only) -->
   <nav class="tabbar hidden" id="tabbar" aria-label="Sections">
