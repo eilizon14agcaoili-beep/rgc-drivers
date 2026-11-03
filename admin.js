@@ -4,7 +4,7 @@ import {
   initializeAuth, browserSessionPersistence, onAuthStateChanged, signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, getDocs, deleteDoc, updateDoc, collection, onSnapshot, query, orderBy, limit,
+  getFirestore, doc, getDoc, getDocs, deleteDoc, updateDoc, collection, onSnapshot, query, orderBy, limit, where,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // The admin uses its own Firebase app instance whose login lives only in THIS tab.
@@ -26,10 +26,14 @@ let selected = null;         // circleId or null (= all circles)
 
 let map = null;
 const markers = new Map();   // "circleId:uid" -> Leaflet marker
-let didInitialFit = false;
+let shownKeys = new Set();        // pins currently on the map
+let lastUserMove = 0;            // when the admin last moved/zoomed the map by hand
+let programmatic = false;
 
 // Movement history per driver: key -> { points: [{lat,lng,t,acc}], trail, circle }
 const history = new Map();
+const lastSeen = new Map();   // "circleId:uid" -> last known { lat, lng, t, name }
+const ghostMarkers = new Map();
 const MAX_POINTS = 30;
 
 // ---------- helpers ----------
@@ -91,6 +95,7 @@ function recordFix(key, loc) {
     h = { points: [], trail: null, circle: null };
     history.set(key, h);
   }
+  lastSeen.set(key, { lat: loc.lat, lng: loc.lng, t: loc.updatedAt, name: loc.name });
   const last = h.points[h.points.length - 1];
   if (!last || last.t !== loc.updatedAt) {
     h.points.push({ lat: loc.lat, lng: loc.lng, t: loc.updatedAt, acc: loc.accuracy || 0 });
@@ -216,7 +221,7 @@ function watchCircle(c) {
 
   // latest trips (from / to) of this circle
   c.unsubT = onSnapshot(
-    query(collection(db, "circles", c.id, "trips"), orderBy("startedAt", "desc"), limit(50)),
+    query(collection(db, "circles", c.id, "trips"), orderBy("startedAt", "desc"), limit(100)),
     (s) => {
       c.trips = s.docs.map((d) => ({ id: d.id, ...d.data() }));
       renderAll();
@@ -253,7 +258,15 @@ function initMap() {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
   }
+  map.on("dragstart zoomstart", () => { if (!programmatic) lastUserMove = Date.now(); });
   setTimeout(() => map.invalidateSize(), 0);
+}
+
+// map moves made by the page itself must not count as the admin moving the map
+function moveMap(fn) {
+  programmatic = true;
+  fn();
+  setTimeout(() => { programmatic = false; }, 1500);
 }
 
 function pinIcon(name) {
@@ -293,29 +306,40 @@ function drawPins() {
     }
   }
 
+  const pos = displayPositions(drivers);
   for (const d of drivers) {
+    try {
     const name = d.loc.name || "?";
     const info = movementInfo(d.key);
     const popup = document.createElement("div");
     const strong = document.createElement("strong");
     strong.textContent = name;
     popup.append(strong);
+    const trip = d.circle.trips.find((t) => t.uid === d.uid && t.status !== "done");
     for (const line of [
       d.circle.name + " · updated " + timeAgo(d.loc.updatedAt),
+      trip ? "Route: " + (trip.from || "?") + " → " + (trip.to || "?") : "No route submitted",
       "Accuracy: " + accuracyLabel(d.loc.accuracy),
       info.text,
     ]) {
       popup.append(document.createElement("br"), document.createTextNode(line));
     }
+    const hb = document.createElement("button");
+    hb.type = "button";
+    hb.className = "act";
+    hb.textContent = "View history";
+    hb.style.marginTop = "8px";
+    hb.addEventListener("click", () => openHistory(d.uid, name));
+    popup.append(document.createElement("br"), hb);
 
     let m = markers.get(d.key);
     if (!m) {
-      m = L.marker([d.loc.lat, d.loc.lng], { icon: pinIcon(name) }).addTo(map);
+      m = L.marker(pos.get(d.key), { icon: pinIcon(name) }).addTo(map);
       m.bindTooltip(name, { permanent: true, direction: "top", offset: [0, -22], className: "pin-label" });
       m.bindPopup(popup);
       markers.set(d.key, m);
     } else {
-      m.setLatLng([d.loc.lat, d.loc.lng]);   // pin jumps to the new position on each update
+      m.setLatLng(pos.get(d.key));   // pin jumps to the new position on each update
       m.setPopupContent(popup);
     }
     const stale = Date.now() - d.loc.updatedAt > STALE_MS;
@@ -335,19 +359,82 @@ function drawPins() {
         else h.trail.setLatLngs(latlngs);
       }
     }
+    } catch (err) {
+      console.error("pin failed", d.key, err);
+    }
   }
 
-  if (!didInitialFit && drivers.length > 0) {
-    didInitialFit = true;
-    fitToVisible();
+  // when a new driver shows up, zoom out to include everyone (unless the admin is looking around)
+  const fresh = drivers.some((d) => !shownKeys.has(d.key));
+  shownKeys = keep;
+  if (fresh && Date.now() - lastUserMove > 20000) fitToVisible();
+}
+
+// Drivers standing within ~20 m of each other would hide behind one pin: fan them out a little
+function displayPositions(drivers) {
+  const pos = new Map(drivers.map((d) => [d.key, [d.loc.lat, d.loc.lng]]));
+  const used = new Set();
+  for (let i = 0; i < drivers.length; i++) {
+    if (used.has(i)) continue;
+    const group = [i];
+    for (let j = i + 1; j < drivers.length; j++) {
+      if (used.has(j)) continue;
+      const a = drivers[i].loc, b = drivers[j].loc;
+      if (distanceM({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng }) < 20) group.push(j);
+    }
+    if (group.length < 2) continue;
+    const cLat = group.reduce((n, k) => n + drivers[k].loc.lat, 0) / group.length;
+    const cLng = group.reduce((n, k) => n + drivers[k].loc.lng, 0) / group.length;
+    group.forEach((k, n) => {
+      used.add(k);
+      const ang = (2 * Math.PI * n) / group.length;
+      const r = 18;   // metres
+      pos.set(drivers[k].key, [
+        cLat + (r * Math.cos(ang)) / 111320,
+        cLng + (r * Math.sin(ang)) / (111320 * Math.cos((cLat * Math.PI) / 180)),
+      ]);
+    });
+  }
+  return pos;
+}
+
+// Faded "last seen" pin for a driver who is still on duty but whose live location stopped
+function drawGhosts() {
+  if (!map) return;
+  const keep = new Set();
+  for (const c of circles.values()) {
+    if (selected && c.id !== selected) continue;
+    for (const t of c.trips) {
+      if (t.status === "done" || !t.dutyStartedAt || t.dutyEndedAt) continue;
+      if (c.locs.has(t.uid)) continue;
+      const key = c.id + ":" + t.uid;
+      const seen = lastSeen.get(key);
+      if (!seen) continue;
+      keep.add(key);
+      const text = (seen.name || t.name || "?") + " · last seen " + timeAgo(seen.t);
+      let m = ghostMarkers.get(key);
+      if (!m) {
+        m = L.marker([seen.lat, seen.lng], { icon: pinIcon(seen.name || "?"), opacity: 0.45 }).addTo(map);
+        m.bindTooltip(text, { permanent: true, direction: "top", offset: [0, -22], className: "pin-label" });
+        ghostMarkers.set(key, m);
+      } else {
+        m.setTooltipContent(text);
+      }
+    }
+  }
+  for (const [key, m] of ghostMarkers) {
+    if (!keep.has(key)) { m.remove(); ghostMarkers.delete(key); }
   }
 }
 
 function fitToVisible() {
+  if (!map) return;
   const pts = visibleDrivers().map((d) => [d.loc.lat, d.loc.lng]);
   if (pts.length === 0) return;
-  if (pts.length === 1) map.setView(pts[0], 16);
-  else map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 17 });
+  moveMap(() => {
+    if (pts.length === 1) map.setView(pts[0], 16);
+    else map.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 17 });
+  });
 }
 
 // ---------- sidebar ----------
@@ -406,12 +493,56 @@ function makeRow(title, sub, liveCount, isSelected, onClick) {
   return btn;
 }
 
+// Drivers who started duty but have no live location right now
+function noSignalDrivers() {
+  const out = [];
+  for (const c of circles.values()) {
+    if (selected && c.id !== selected) continue;
+    for (const t of c.trips) {
+      if (t.status === "done" || !t.dutyStartedAt || t.dutyEndedAt) continue;
+      if (c.locs.has(t.uid)) continue;
+      out.push({ circle: c, trip: t });
+    }
+  }
+  return out;
+}
+
 function renderDrivers() {
   const list = $("drivers");
   list.replaceChildren();
   const drivers = visibleDrivers();
-  $("driver-count").textContent = drivers.length;
-  $("drivers-empty").classList.toggle("hidden", drivers.length > 0);
+  const lost = noSignalDrivers();
+  $("driver-count").textContent = drivers.length + lost.length;
+  $("drivers-empty").classList.toggle("hidden", drivers.length + lost.length > 0);
+
+  for (const x of lost) {
+    const name = x.trip.name || "?";
+    const li = document.createElement("li");
+    const row = document.createElement("div");
+    row.className = "row";
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = (name[0] || "?").toUpperCase();
+    avatar.style.background = avatarColor(name);
+    const main = document.createElement("span");
+    main.className = "row__main";
+    const t = document.createElement("span");
+    t.className = "row__title";
+    t.textContent = name;
+    const sub = document.createElement("span");
+    sub.className = "row__sub";
+    const seen = lastSeen.get(x.circle.id + ":" + x.trip.uid);
+    sub.textContent = x.circle.name + " · on duty since " + fmtTime(x.trip.dutyStartedAt) +
+      (seen ? ", last seen " + timeAgo(seen.t) : ", no location yet") +
+      (x.trip.locIssue ? " · Reason: " + x.trip.locIssue : "");
+    main.append(t, sub);
+    const badge = document.createElement("span");
+    badge.className = "badge bad";
+    badge.textContent = "No signal";
+    row.append(avatar, main, badge);
+    li.append(row);
+    list.append(li);
+  }
 
   for (const d of drivers) {
     const name = d.loc.name || "?";
@@ -447,7 +578,7 @@ function renderDrivers() {
 function focusDriver(key, loc) {
   const m = markers.get(key);
   if (!m) return;
-  map.flyTo([loc.lat, loc.lng], 17);
+  moveMap(() => map.flyTo([loc.lat, loc.lng], 17));
   m.openPopup();
 }
 
@@ -461,13 +592,10 @@ function selectCircle(id) {
 }
 
 function renderAll() {
-  renderTrips();
-  drawDestinations();
-  renderAccounts();
-  renderCircles();
-  renderManage();
-  renderDrivers();
-  drawPins();
+  // each part runs on its own, so one bad record can't stop the map or lists from updating
+  for (const fn of [renderTrips, drawDestinations, renderAccounts, renderCircles, renderManage, renderDrivers, drawPins, drawGhosts]) {
+    try { fn(); } catch (err) { console.error(fn.name, err); }
+  }
 }
 
 
@@ -487,10 +615,15 @@ function renderTrips() {
   const rows = [];
   for (const c of circles.values()) {
     if (selected && c.id !== selected) continue;
-    for (const t of c.trips) rows.push({ t, circle: c });
+    for (const t of c.trips) if (!t.clearedAt) rows.push({ t, circle: c });
   }
   rows.sort((a, b) => (b.t.startedAt || 0) - (a.t.startedAt || 0));
   const shown = rows.slice(0, 100);
+
+  const doneRows = rows.filter((r) => r.t.status === "done");
+  const clearBtn = $("clear-done");
+  clearBtn.disabled = doneRows.length === 0;
+  clearBtn.textContent = "Clear done (" + doneRows.length + ")";
 
   $("trip-count").textContent = rows.length;
   const sel = selected ? circles.get(selected) : null;
@@ -531,9 +664,62 @@ function renderTrips() {
     ab.textContent = info.text;
     ar.append(ab);
     tr.append(ar);
+
+    const act = document.createElement("td");
+    act.className = "td-action";
+    if (done) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "act";
+      del.textContent = "Clear";
+      del.setAttribute("aria-label", "Clear trip " + (t.from || "") + " to " + (t.to || "") + " from the table");
+      del.addEventListener("click", () => clearTrip(circle, t));
+      act.append(del);
+    }
+    tr.append(act);
     body.append(tr);
   }
 }
+
+// ---------- clear finished trips from the table (history is kept) ----------
+function setTripsNotice(text, isError = false) {
+  const el = $("trips-notice");
+  el.textContent = text;
+  el.classList.toggle("error", isError);
+}
+
+// Only hides the trip from the Trips table. The trip stays in the driver's History.
+async function clearTrip(circle, t) {
+  setTripsNotice("");
+  try {
+    await updateDoc(doc(db, "circles", circle.id, "trips", t.id), { clearedAt: Date.now() });
+  } catch (err) {
+    console.error(err);
+    setTripsNotice("Couldn't clear the trip. (" + (err.code || err.message) + ")", true);
+  }
+}
+
+$("clear-done").addEventListener("click", async () => {
+  const targets = [];
+  for (const c of circles.values()) {
+    if (selected && c.id !== selected) continue;
+    for (const t of c.trips) if (t.status === "done" && !t.clearedAt) targets.push({ c, t });
+  }
+  if (targets.length === 0) return;
+
+  setTripsNotice("Clearing…");
+  let failed = 0;
+  const now = Date.now();
+  await Promise.all(targets.map(({ c, t }) =>
+    updateDoc(doc(db, "circles", c.id, "trips", t.id), { clearedAt: now }).catch((err) => { failed++; console.error(err); })
+  ));
+  setTripsNotice(
+    failed
+      ? failed + " couldn't be cleared."
+      : "Cleared " + targets.length + " done trip(s) from the table. They are still in each driver's history.",
+    failed > 0
+  );
+});
 
 // ---------- did the driver actually reach the destination? ----------
 function fmtDist(m) {
@@ -549,6 +735,7 @@ function arrivalInfo(t, circle) {
     const d = distanceM({ lat: loc.lat, lng: loc.lng }, { lat: t.toLat, lng: t.toLng });
     return { text: fmtDist(d) + " away", cls: "" };
   }
+  if (t.dutyStartedAt && !t.dutyEndedAt) return { text: "No location signal", cls: "bad" };
   return { text: "Not arrived yet", cls: "" };
 }
 
@@ -590,6 +777,154 @@ function drawDestinations() {
     }
   }
 }
+
+// ---------- driver history ----------
+let histDriver = null;     // { uid, name }
+let histTrips = [];
+let histRange = "all";     // "7" | "30" | "all"
+let histToken = 0;
+
+function fmtDuration(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return "<1 min";
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+
+function arrivalText(t) {
+  if (t.arrivedAt) return "Arrived " + fmtTime(t.arrivedAt);
+  if (t.toLat == null) return "Can't verify";
+  return t.status === "done" ? "Did not arrive" : "In progress";
+}
+
+function dutyText(t) {
+  if (!t.dutyStartedAt) return "—";
+  const end = t.dutyEndedAt || (t.status === "done" ? t.doneAt : null);
+  return end ? fmtDuration(end - t.dutyStartedAt) : "On duty";
+}
+
+function histRows() {
+  if (histRange === "all") return histTrips;
+  const cutoff = Date.now() - Number(histRange) * 86400000;
+  return histTrips.filter((t) => (t.startedAt || 0) >= cutoff);
+}
+
+function renderHistory() {
+  const rows = histRows();
+  const done = rows.filter((t) => t.status === "done").length;
+  const arrived = rows.filter((t) => t.arrivedAt).length;
+  const missed = rows.filter((t) => !t.arrivedAt && t.toLat != null && t.status === "done").length;
+  const unknown = rows.filter((t) => !t.arrivedAt && t.toLat == null).length;
+
+  $("hist-sub").textContent = "Includes trips cleared from the Trips table.";
+
+  const sum = $("hist-summary");
+  sum.replaceChildren();
+  for (const [label, value] of [["Trips", rows.length], ["Done", done], ["Arrived", arrived], ["Did not arrive", missed], ["Can't verify", unknown]]) {
+    const chip = document.createElement("div");
+    chip.className = "hist-chip";
+    const b = document.createElement("b");
+    b.textContent = value;
+    chip.append(b, document.createTextNode(label));
+    sum.append(chip);
+  }
+
+  document.querySelectorAll("#hist-filters .act[data-range]").forEach((b) => b.classList.toggle("is-on", b.dataset.range === histRange));
+
+  const body = $("hist-body");
+  body.replaceChildren();
+  $("hist-empty").classList.toggle("hidden", rows.length > 0);
+  $("hist-csv").disabled = rows.length === 0;
+
+  const labels = ["Date", "Time", "From", "To", "Duty time", "Arrival", "Status"];
+  for (const t of rows) {
+    const tr = document.createElement("tr");
+    const cells = [
+      t.startedAt ? fmtDate(t.startedAt) : "—",
+      t.startedAt ? fmtTime(t.startedAt) : "—",
+      t.from || "—",
+      t.to || "—",
+      dutyText(t),
+      arrivalText(t),
+      t.status === "done" ? "Done" + (t.doneAt ? " " + fmtTime(t.doneAt) : "") : "Ongoing",
+    ];
+    cells.forEach((text, i) => {
+      const td = document.createElement("td");
+      td.dataset.label = labels[i];
+      td.textContent = text;
+      tr.append(td);
+    });
+    body.append(tr);
+  }
+}
+
+async function openHistory(uid, name) {
+  histDriver = { uid, name };
+  histRange = "all";
+  histTrips = [];
+  const token = ++histToken;
+
+  $("hist-title").textContent = "History · " + name;
+  $("hist-sub").textContent = "Loading…";
+  $("hist-summary").replaceChildren();
+  $("hist-body").replaceChildren();
+  $("hist-empty").classList.add("hidden");
+  $("hist-csv").disabled = true;
+  $("history").classList.remove("hidden");
+  $("hist-close").focus();
+
+  try {
+    const all = await Promise.all([...circles.values()].map(async (c) => {
+      const snap = await getDocs(query(collection(db, "circles", c.id, "trips"), where("uid", "==", uid)));
+      return snap.docs.map((d) => ({ id: d.id, circleName: c.name, ...d.data() }));
+    }));
+    if (token !== histToken) return;   // another driver was opened meanwhile
+    histTrips = all.flat().sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    renderHistory();
+  } catch (err) {
+    console.error(err);
+    $("hist-sub").textContent = "Couldn't load history. (" + (err.code || err.message) + ")";
+  }
+}
+
+function closeHistory() {
+  histToken++;
+  $("history").classList.add("hidden");
+}
+
+function downloadHistoryCsv() {
+  const rows = histRows();
+  const esc = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const lines = [["Date", "Time", "Circle", "From", "To", "Duty time", "Arrival", "Status"].map(esc).join(",")];
+  for (const t of rows) {
+    lines.push([
+      t.startedAt ? fmtDate(t.startedAt) : "",
+      t.startedAt ? fmtTime(t.startedAt) : "",
+      t.circleName || "",
+      t.from || "",
+      t.to || "",
+      dutyText(t),
+      arrivalText(t),
+      t.status === "done" ? "Done" : "Ongoing",
+    ].map(esc).join(","));
+  }
+  const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "history-" + (histDriver ? histDriver.name.replace(/[^\w-]+/g, "_") : "driver") + "-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+$("hist-close").addEventListener("click", closeHistory);
+$("history").addEventListener("click", (e) => { if (e.target === $("history")) closeHistory(); });
+$("history").addEventListener("keydown", (e) => { if (e.key === "Escape") closeHistory(); });
+$("hist-csv").addEventListener("click", downloadHistoryCsv);
+document.querySelectorAll("#hist-filters .act[data-range]").forEach((b) => {
+  b.addEventListener("click", () => { histRange = b.dataset.range; renderHistory(); });
+});
 
 // ---------- all accounts ----------
 function renderAccounts() {
@@ -647,7 +982,15 @@ function renderAccounts() {
 
     btn.append(avatar, main, badge);
     if (r.circle) btn.addEventListener("click", () => selectCircle(r.circle.id));
+    li.className = "circle-li";
     li.append(btn);
+    const hb = document.createElement("button");
+    hb.type = "button";
+    hb.className = "act";
+    hb.textContent = "History";
+    hb.setAttribute("aria-label", "History of " + r.name);
+    hb.addEventListener("click", () => openHistory(r.uid, r.name));
+    li.append(hb);
     list.append(li);
   }
 }
@@ -719,6 +1062,13 @@ function renderManage() {
     main.append(t, sub);
 
     li.append(avatar, main);
+
+    const hist = document.createElement("button");
+    hist.type = "button";
+    hist.className = "act";
+    hist.textContent = "History";
+    hist.addEventListener("click", () => openHistory(m.id, name));
+    li.append(hist);
 
     if (m.id !== c.ownerId) {
       const rm = document.createElement("button");
@@ -800,6 +1150,7 @@ async function deleteCircle(c) {
 }
 
 $("view-map").addEventListener("click", () => setTab("map"));
+$("fit-all").addEventListener("click", () => { lastUserMove = 0; fitToVisible(); });
 $("remove-inactive").addEventListener("click", removeInactive);
 $("delete-circle").addEventListener("click", () => {
   const c = selected ? circles.get(selected) : null;
