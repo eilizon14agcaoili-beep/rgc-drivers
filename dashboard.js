@@ -810,6 +810,17 @@ function startSharing() {
   setStatus("Starting your duty… please allow location permission.", "refreshing");
   requestWakeLock();
 
+  // installed app: keep tracking in the background with a foreground service
+  const bg = nativeBG();
+  if (bg) {
+    startBackgroundWatch(bg);
+    return;
+  }
+  startWebWatch();
+}
+
+// Browser version: only works while the page is open and the screen is on
+function startWebWatch() {
   // quick coarse fix so the pin shows up right away, even before GPS locks on
   navigator.geolocation.getCurrentPosition(
     (pos) => {
@@ -839,6 +850,91 @@ function startSharing() {
 
   if (locationTimer) clearInterval(locationTimer);
   locationTimer = setInterval(locationTick, LOCATION_INTERVAL_MS);
+}
+
+// ---------- background tracking (installed app only) ----------
+// Uses the @capacitor-community/background-geolocation plugin. It keeps a notification
+// ("tracking is on") and keeps sending positions while the app is in another app or the screen is locked.
+let bgPlugin = null;
+let bgWatcherId = null;
+let lastBgWrite = 0;
+
+function nativeBG() {
+  try {
+    const C = window.Capacitor;
+    if (!C || !C.isNativePlatform || !C.isNativePlatform()) return null;
+    if (!bgPlugin) {
+      bgPlugin = (C.registerPlugin && C.registerPlugin("BackgroundGeolocation")) ||
+        (C.Plugins && C.Plugins.BackgroundGeolocation) || null;
+    }
+    return bgPlugin;
+  } catch {
+    return null;
+  }
+}
+
+async function startBackgroundWatch(bg) {
+  lastBgWrite = 0;
+  try {
+    const id = await bg.addWatcher(
+      {
+        backgroundTitle: "RGC Driver: duty is on",
+        backgroundMessage: "Your location is shared while you're on duty. Tap End your duty when you arrive.",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 0,
+      },
+      (location, error) => {
+        if (error) {
+          if (error.code === "NOT_AUTHORIZED") {
+            reportLocIssue("Location permission is blocked on the phone.");
+            setSharePref(false);
+            stopSharing();
+            const errText = "Location is blocked. Please allow Location for this app in your phone settings.";
+            setStatus(errText, "error");
+            showToast(errText, true);
+          } else {
+            reportLocIssue("Location error: " + (error.message || error.code || "unknown"));
+          }
+          return;
+        }
+        if (!location || !sharing) return;
+
+        const pos = {
+          coords: { latitude: location.latitude, longitude: location.longitude, accuracy: location.accuracy || 0 },
+          timestamp: location.time || Date.now(),
+        };
+        lastPos = pos;
+
+        // write the first fix and the first precise fix at once, then every 30 seconds
+        const now = Date.now();
+        const precise = !preciseWritten && pos.coords.accuracy <= 100;
+        if (precise) preciseWritten = true;
+        if (precise || now - lastBgWrite >= LOCATION_INTERVAL_MS) {
+          lastBgWrite = now;
+          writeLocation(pos);
+        }
+      }
+    );
+    bgWatcherId = id;
+    if (!sharing) {                 // duty was ended while the watcher was starting
+      await stopBackgroundWatch();
+    }
+  } catch (err) {
+    console.warn("background tracking not available, using the normal one", err);
+    if (sharing) startWebWatch();
+  }
+}
+
+async function stopBackgroundWatch() {
+  if (bgWatcherId === null || !bgPlugin) return;
+  const id = bgWatcherId;
+  bgWatcherId = null;
+  try {
+    await bgPlugin.removeWatcher({ id });
+  } catch (err) {
+    console.warn("couldn't stop the background watcher", err);
+  }
 }
 
 function locationTick() {
@@ -932,6 +1028,7 @@ async function onPositionError(err) {
 async function stopSharing(message) {
   clearTimeout(locWatchdog);
   const finalPos = lastPos;     // last known position, for a final arrival check
+  await stopBackgroundWatch();
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   if (locationTimer) clearInterval(locationTimer);
   watchId = null;
@@ -1000,7 +1097,7 @@ $("trip-done").addEventListener("click", async () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
-  if (sharing) {
+  if (sharing && bgWatcherId === null) {   // the background watcher needs no nudge
     requestWakeLock();
     locationTick();
   }
