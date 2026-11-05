@@ -17,7 +17,7 @@ let locs = new Map();        // uid -> { name, lat, lng, accuracy, updatedAt }
 let people = [];             // current members
 
 // ---------- duty (location) state ----------
-const LOCATION_INTERVAL_MS = 30000;   // auto-refresh every 30 seconds
+const LOCATION_INTERVAL_MS = 10000;   // auto-refresh every 30 seconds
 let watchId = null;
 let sharing = false;                   // true = on duty
 let lastPos = null;
